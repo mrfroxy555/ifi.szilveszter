@@ -11,7 +11,7 @@ export const SocketProvider = ({ children }) => {
     useEffect(() => {
         // Connect to the server
         // In production, this should be the actual server URL
-        const newSocket = io('http://localhost:3000');
+        const newSocket = io(import.meta.env.VITE_SERVER_URL || 'http://localhost:3000');
         setSocket(newSocket);
 
         return () => newSocket.close();
