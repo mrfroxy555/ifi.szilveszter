@@ -35,12 +35,41 @@ module.exports = (io, socket) => {
     // Player joins a game
     socket.on('join_game', async ({ pin, name }) => {
         try {
-            const game = await Game.findOne({ pin, status: 'waiting' });
+            // Find game by PIN (regardless of status initially)
+            const game = await Game.findOne({ pin });
             if (!game) {
-                return socket.emit('error', 'Game not found or already started');
+                return socket.emit('error', 'Game not found');
             }
 
-            const player = new Player({
+            // Check if player already exists in this game
+            let player = await Player.findOne({ gameId: game._id, name });
+
+            if (player) {
+                // RECONNECTION: Update socket ID and rejoin
+                player.socketId = socket.id;
+                await player.save();
+
+                socket.join(pin);
+                socket.emit('joined_success', { playerId: player._id, gameId: game._id });
+
+                // If game is active, send current state
+                if (game.status === 'active') {
+                    const questions = await Question.find({ _id: { $in: game.questions } });
+                    const currentQ = questions[game.currentQuestionIndex];
+                    socket.emit('game_started');
+                    socket.emit('new_question', currentQ);
+                }
+
+                console.log(`Player ${name} reconnected to game ${pin}`);
+                return;
+            }
+
+            // NEW JOIN: Only allowed if game is waiting
+            if (game.status !== 'waiting') {
+                return socket.emit('error', 'Game already started');
+            }
+
+            player = new Player({
                 name,
                 socketId: socket.id,
                 gameId: game._id
